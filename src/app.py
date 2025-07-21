@@ -1,7 +1,7 @@
-import sys # ADD THIS LINE
-import os  # ADD THIS LINE (if not already present, it usually is)
+import sys
+import os
 
-# ADD THESE LINES TO FIX THE ModuleNotFoundError ON DEPLOYMENT
+# Add the project root to the system path for module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from dotenv import load_dotenv
@@ -70,65 +70,60 @@ def Automated_Resume_Ranking_System(job_description , pdf_content):
 # Streamlit App
 st.set_page_config(page_title="Automated Resume Ranking System")
 st.header("Automated Resume Ranking System")
-# Updated instruction for hardcoded PDF
-st.write("This system processes the predefined 'sample_resume.pdf' against your job description.")
+# Instruction for file upload
+st.write("Upload a job description and your resume (PDF) to get a percentage match!")
 st.subheader("1. Enter Job Description")
 input_text = st.text_area("Job Description", key="input", height=200)
 
-# REMOVED: st.subheader("2. Upload Your Resume")
-# REMOVED: uploaded_file = st.file_uploader("Upload your resume (PDF)...", type=["pdf"])
-# REMOVED: if uploaded_file is not None:
-# REMOVED:     st.success("PDF Uploaded Successfully!")
+# RE-ADDED: File Uploader Section
+st.subheader("2. Upload Your Resume")
+uploaded_file = st.file_uploader("Upload your resume (PDF)...", type=["pdf"])
+
+if uploaded_file is not None:
+    st.success("PDF Uploaded Successfully!")
 
 submit = st.button("Calculate Percentage Match")
 
 
 if submit:
-    # --- START OF HARDCODED PDF READING ---
-    try:
-        # Read the predefined PDF directly
-        with open('sample_resume.pdf', 'rb') as f:
-            raw_pdf_bytes = f.read()
+    # --- REVERTED TO FILE UPLOADER LOGIC ---
+    if uploaded_file is not None:
+        with st.spinner("Processing your resume and job description..."):
+            try:
+                # Use uploaded_file directly
+                pdf_content = input_pdf_setup(uploaded_file)
+                response_json_str = Automated_Resume_Ranking_System(input_text, pdf_content[0])
 
-        # Pass the raw bytes to your input_pdf_setup function
-        # Mimic UploadedFile object for input_pdf_setup by providing a dictionary with a 'read' method
-        pdf_content = input_pdf_setup({"read": lambda: raw_pdf_bytes})
+                if "error" in response_json_str:
+                    response_data = json.loads(response_json_str)
+                    st.error(f"Processing failed: {response_data.get('error', 'Unknown error during API call.')}")
+                else:
+                    response_data = json.loads(response_json_str)
 
-        with st.spinner("Processing predefined resume and job description..."):
-            response_json_str = Automated_Resume_Ranking_System(input_text, pdf_content[0])
+                    st.subheader("Matching Results:")
 
-        if "error" in response_json_str:
-            response_data = json.loads(response_json_str)
-            st.error(f"Processing failed: {response_data.get('error', 'Unknown error during API call.')}")
-        else:
-            response_data = json.loads(response_json_str)
+                    if "Designation Match" in response_data:
+                        designation_match = response_data["Designation Match"]
+                        st.metric(label="Designation Match", value=f"{designation_match}%")
+                    if "Semantic Keyword Match" in response_data:
+                        keyword_match = response_data["Semantic Keyword Match"]
+                        st.metric(label="Semantic Keyword Match", value=f"{keyword_match}%")
+                    if "Final Match" in response_data:
+                        final_match = response_data["Final Match"]
+                        st.metric(label="Overall Match", value=f"{final_match}%", delta=f"{final_match - 50:.1f}% from average")
 
-            st.subheader("Matching Results:")
+                    st.markdown("---")
+                    st.write("Raw Model Output (for debugging):")
+                    st.json(response_data)
 
-            if "Designation Match" in response_data:
-                designation_match = response_data["Designation Match"]
-                st.metric(label="Designation Match", value=f"{designation_match}%")
-            if "Semantic Keyword Match" in response_data:
-                keyword_match = response_data["Semantic Keyword Match"]
-                st.metric(label="Semantic Keyword Match", value=f"{keyword_match}%")
-            if "Final Match" in response_data:
-                final_match = response_data["Final Match"]
-                st.metric(label="Overall Match", value=f"{final_match}%", delta=f"{final_match - 50:.1f}% from average")
+            except FileNotFoundError: # This might still trigger if input_pdf_setup raises it for some reason
+                st.error("File Error: Could not read the uploaded PDF. Please try again.")
+            except json.JSONDecodeError:
+                st.error("Error: Could not parse the model's response. The AI might have returned an unexpected format. Please try again.")
+                st.write("Raw response:", response_json_str)
+            except Exception as e:
+                st.error(f"An unexpected error occurred during processing: {e}")
+                st.write("Please check the console for more details.")
 
-            st.markdown("---")
-            st.write("Raw Model Output (for debugging):")
-            st.json(response_data)
-
-    except FileNotFoundError:
-        st.error("Error: 'sample_resume.pdf' not found. Please ensure it is in the 'src' directory.")
-    except json.JSONDecodeError:
-        st.error("Error: Could not parse the model's response. The AI might have returned an unexpected format. Please try again.")
-        st.write("Raw response:", response_json_str)
-    except Exception as e:
-        st.error(f"An unexpected error occurred during processing: {e}")
-        st.write("Please check the console for more details.")
-
-    # --- END OF HARDCODED PDF READING ---
-
-# REMOVED: else:
-# REMOVED: st.warning("Please upload a resume to get a match!")
+    else:
+        st.warning("Please upload a resume to get a match!") # Re-added warning for no file uploaded
