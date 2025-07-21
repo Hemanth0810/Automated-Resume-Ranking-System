@@ -1,36 +1,16 @@
 import sys
 import os
 
-# Add the project root to the system path for module imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# --- Poppler path configuration for pdf2image on Streamlit Cloud ---
+# This must be set BEFORE any calls to pdf2image or input_pdf_setup
+# /usr/bin is a common path for poppler-utils executables on Linux systems.
+# This environment variable tells pdf2image where to look.
+os.environ["POPPLER_PATH"] = "/usr/bin"
+# --- End Poppler path configuration ---
 
-# --- START POPPLER PATH CONFIGURATION FOR DEPLOYMENT ---
-# This block specifically helps pdf2image find Poppler in Streamlit Cloud
-# It assumes Poppler might be available in a common location or attempts to set it
-try:
-    if os.environ.get("STREAMLIT_SERVER_PORT"): # Check if running on Streamlit Cloud
-        # Common paths for Poppler on Linux-based cloud environments
-        # You might need to adjust this based on actual Poppler installation path
-        # A common one is /usr/bin/ which should be in PATH anyway, but explicit set can help
-        # If Streamlit Cloud installs poppler-utils, it should be discoverable
-        # However, sometimes pdf2image needs the path to the bin directory.
-        # Let's try pointing directly to the poppler_path
-        # For environments that install poppler-utils, this is often implicitly handled,
-        # but sometimes an explicit path for pdf2image helps.
-        # Let's try to set it only if it's not already set.
-        if "POPPLER_PATH" not in os.environ:
-             # This path is a common default for poppler-utils installation on Ubuntu/Debian like systems
-             # This line is more about making pdf2image explicitly aware of where to look.
-             # No need to set if packages.txt properly works.
-            pass # We rely on packages.txt for this. Let's not override system PATH
-    else:
-        # For local Windows development, you need Poppler in your local PATH
-        # This 'else' block is for local troubleshooting/reminders, not for deployment logic
-        pass
-except Exception as e:
-    # Log this but don't stop the app from starting
-    print(f"DEBUG: Poppler path setup failed: {e}")
-# --- END POPPLER PATH CONFIGURATION ---
+# Add the project root to the system path for module imports
+# This ensures Python can find 'src' as a package when deployed
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from dotenv import load_dotenv
 import streamlit as st
@@ -39,13 +19,14 @@ import json
 
 # Import the utility function from the new structure
 from src.utils.pdf_processor import input_pdf_setup
-from pdf2image.exceptions import PopplerNotInstalledError # Add this import for specific error handling
+from pdf2image.exceptions import PopplerNotInstalledError # Keep this import
 
 load_dotenv()
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def Automated_Resume_Ranking_System(job_description , pdf_content):
+  # Prompts should be clear. LLMs write sentences based on the probability of words, where that probability depends on context words.
   prompt_1 = f"""
   Extract the designation of the job from job description
   Extract the key words from job description
@@ -58,20 +39,22 @@ def Automated_Resume_Ranking_System(job_description , pdf_content):
   Extract the key words from this resume
   Final output is the designation and keywords in json format
   """
-  model1 =  genai.GenerativeModel('gemini-pro')
+  model1 =  genai.GenerativeModel('gemini-pro')  # Model for text to text data
   try:
-      response_job = model1.generate_content(prompt_1)
+      response_job = model1.generate_content(prompt_1) # Extracting the Keywords from Job Description
       response_job = response_job.text.replace("\n","")
   except Exception as e:
       st.error(f"Error extracting job description keywords: {e}")
+      # Return a JSON string with an error message, as the function expects a JSON string return
       return json.dumps({"error": f"Failed to process job description: {e}"})
 
-  model2 =  genai.GenerativeModel('gemini-pro-vision')
+  model2 =  genai.GenerativeModel('gemini-pro-vision')  # Model for image data to text
   try:
-      response_resume = model2.generate_content([prompt_2,pdf_content])
+      response_resume = model2.generate_content([prompt_2,pdf_content]) # Extracting the Keywords from Resume
       response_resume = response_resume.text.replace("\n","")
   except Exception as e:
       st.error(f"Error extracting resume keywords: {e}")
+      # Return a JSON string with an error message
       return json.dumps({"error": f"Failed to process resume: {e}"})
 
 
@@ -86,11 +69,13 @@ def Automated_Resume_Ranking_System(job_description , pdf_content):
   Final Match : Give me the final sematic match between job and resume in number.
   """
 
+  # Comparing the Semantic relation between the Extracted keywords of Job Description and Resume .
   try:
       response_final = model1.generate_content(prompt_3)
       response_final = response_final.text.replace("\n","")
   except Exception as e:
       st.error(f"Error comparing job and resume: {e}")
+      # Return a JSON string with an error message
       return json.dumps({"error": f"Failed to compare job and resume: {e}"})
 
   return response_final
@@ -104,7 +89,7 @@ st.write("Upload a job description and your resume (PDF) to get a percentage mat
 st.subheader("1. Enter Job Description")
 input_text = st.text_area("Job Description", key="input", height=200)
 
-# RE-ADDED: File Uploader Section
+# File Uploader Section
 st.subheader("2. Upload Your Resume")
 uploaded_file = st.file_uploader("Upload your resume (PDF)...", type=["pdf"])
 
@@ -118,10 +103,11 @@ if submit:
     if uploaded_file is not None:
         with st.spinner("Processing your resume and job description..."):
             try:
+                # Use uploaded_file directly from st.file_uploader
                 pdf_content = input_pdf_setup(uploaded_file)
                 response_json_str = Automated_Resume_Ranking_System(input_text, pdf_content[0])
 
-                if "error" in response_json_str:
+                if "error" in response_json_str: # Check if the function itself returned an error JSON
                     response_data = json.loads(response_json_str)
                     st.error(f"Processing failed: {response_data.get('error', 'Unknown error during API call.')}")
                 else:
@@ -145,10 +131,11 @@ if submit:
 
             except PopplerNotInstalledError: # Catch specific Poppler error
                 st.error("Error: Poppler is not installed or not found. Please contact support if this is on a deployed app.")
-            except FileNotFoundError as e:
+            except FileNotFoundError as e: # This might still trigger if input_pdf_setup raises it for some reason
                 st.error(f"File Error: {e}. Please ensure a valid PDF is uploaded.")
             except json.JSONDecodeError:
                 st.error("Error: Could not parse the model's response. The AI might have returned an unexpected format. Please try again.")
+                # It's helpful to also print the raw response that failed to parse
                 st.write("Raw response:", response_json_str)
             except Exception as e:
                 st.error(f"An unexpected error occurred during processing: {e}")
