@@ -1,13 +1,6 @@
 import sys
 import os
 
-# --- Poppler path configuration for pdf2image on Streamlit Cloud ---
-# This must be set BEFORE any calls to pdf2image or input_pdf_setup
-# /usr/bin is a common path for poppler-utils executables on Linux systems.
-# This environment variable tells pdf2image where to look.
-os.environ["POPPLER_PATH"] = "/usr/bin"
-# --- End Poppler path configuration ---
-
 # Add the project root to the system path for module imports
 # This ensures Python can find 'src' as a package when deployed
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -18,8 +11,11 @@ import google.generativeai as genai
 import json
 
 # Import the utility function from the new structure
+# This import will now expect pdf_processor.py to use python-poppler
 from src.utils.pdf_processor import input_pdf_setup
-from pdf2image.exceptions import PopplerNotInstalledError # Keep this import
+
+# No longer importing pdf2image.exceptions as we are switching libraries
+# from pdf2image.exceptions import PopplerNotInstalledError
 
 load_dotenv()
 
@@ -129,8 +125,8 @@ if submit:
                     st.write("Raw Model Output (for debugging):")
                     st.json(response_data)
 
-            except PopplerNotInstalledError: # Catch specific Poppler error
-                st.error("Error: Poppler is not installed or not found. Please contact support if this is on a deployed app.")
+            # Specific error for PopplerNotInstalledError is removed as we are no longer using pdf2image
+            # If python-poppler has its own specific error, it can be added here
             except FileNotFoundError as e: # This might still trigger if input_pdf_setup raises it for some reason
                 st.error(f"File Error: {e}. Please ensure a valid PDF is uploaded.")
             except json.JSONDecodeError:
