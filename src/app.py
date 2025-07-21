@@ -4,6 +4,34 @@ import os
 # Add the project root to the system path for module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# --- START POPPLER PATH CONFIGURATION FOR DEPLOYMENT ---
+# This block specifically helps pdf2image find Poppler in Streamlit Cloud
+# It assumes Poppler might be available in a common location or attempts to set it
+try:
+    if os.environ.get("STREAMLIT_SERVER_PORT"): # Check if running on Streamlit Cloud
+        # Common paths for Poppler on Linux-based cloud environments
+        # You might need to adjust this based on actual Poppler installation path
+        # A common one is /usr/bin/ which should be in PATH anyway, but explicit set can help
+        # If Streamlit Cloud installs poppler-utils, it should be discoverable
+        # However, sometimes pdf2image needs the path to the bin directory.
+        # Let's try pointing directly to the poppler_path
+        # For environments that install poppler-utils, this is often implicitly handled,
+        # but sometimes an explicit path for pdf2image helps.
+        # Let's try to set it only if it's not already set.
+        if "POPPLER_PATH" not in os.environ:
+             # This path is a common default for poppler-utils installation on Ubuntu/Debian like systems
+             # This line is more about making pdf2image explicitly aware of where to look.
+             # No need to set if packages.txt properly works.
+            pass # We rely on packages.txt for this. Let's not override system PATH
+    else:
+        # For local Windows development, you need Poppler in your local PATH
+        # This 'else' block is for local troubleshooting/reminders, not for deployment logic
+        pass
+except Exception as e:
+    # Log this but don't stop the app from starting
+    print(f"DEBUG: Poppler path setup failed: {e}")
+# --- END POPPLER PATH CONFIGURATION ---
+
 from dotenv import load_dotenv
 import streamlit as st
 import google.generativeai as genai
@@ -11,6 +39,7 @@ import json
 
 # Import the utility function from the new structure
 from src.utils.pdf_processor import input_pdf_setup
+from pdf2image.exceptions import PopplerNotInstalledError # Add this import for specific error handling
 
 load_dotenv()
 
@@ -86,11 +115,9 @@ submit = st.button("Calculate Percentage Match")
 
 
 if submit:
-    # --- REVERTED TO FILE UPLOADER LOGIC ---
     if uploaded_file is not None:
         with st.spinner("Processing your resume and job description..."):
             try:
-                # Use uploaded_file directly
                 pdf_content = input_pdf_setup(uploaded_file)
                 response_json_str = Automated_Resume_Ranking_System(input_text, pdf_content[0])
 
@@ -116,8 +143,10 @@ if submit:
                     st.write("Raw Model Output (for debugging):")
                     st.json(response_data)
 
-            except FileNotFoundError: # This might still trigger if input_pdf_setup raises it for some reason
-                st.error("File Error: Could not read the uploaded PDF. Please try again.")
+            except PopplerNotInstalledError: # Catch specific Poppler error
+                st.error("Error: Poppler is not installed or not found. Please contact support if this is on a deployed app.")
+            except FileNotFoundError as e:
+                st.error(f"File Error: {e}. Please ensure a valid PDF is uploaded.")
             except json.JSONDecodeError:
                 st.error("Error: Could not parse the model's response. The AI might have returned an unexpected format. Please try again.")
                 st.write("Raw response:", response_json_str)
@@ -126,4 +155,4 @@ if submit:
                 st.write("Please check the console for more details.")
 
     else:
-        st.warning("Please upload a resume to get a match!") # Re-added warning for no file uploaded
+        st.warning("Please upload a resume to get a match!")
