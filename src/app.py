@@ -1,6 +1,11 @@
+import sys # ADD THIS LINE
+import os  # ADD THIS LINE (if not already present, it usually is)
+
+# ADD THESE LINES TO FIX THE ModuleNotFoundError ON DEPLOYMENT
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from dotenv import load_dotenv
 import streamlit as st
-import os
 import google.generativeai as genai
 import json
 
@@ -68,12 +73,12 @@ st.header("Automated Resume Ranking System")
 # Updated instruction for hardcoded PDF
 st.write("This system processes the predefined 'sample_resume.pdf' against your job description.")
 st.subheader("1. Enter Job Description")
-input_text = st.text.area("Job Description", key="input", height=200)
+input_text = st.text_area("Job Description", key="input", height=200)
 
 # REMOVED: st.subheader("2. Upload Your Resume")
 # REMOVED: uploaded_file = st.file_uploader("Upload your resume (PDF)...", type=["pdf"])
 # REMOVED: if uploaded_file is not None:
-# REMOVED:    st.success("PDF Uploaded Successfully!")
+# REMOVED:     st.success("PDF Uploaded Successfully!")
 
 submit = st.button("Calculate Percentage Match")
 
@@ -86,7 +91,8 @@ if submit:
             raw_pdf_bytes = f.read()
 
         # Pass the raw bytes to your input_pdf_setup function
-        pdf_content = input_pdf_setup({"read": lambda: raw_pdf_bytes}) # Mimic UploadedFile object for input_pdf_setup
+        # Mimic UploadedFile object for input_pdf_setup by providing a dictionary with a 'read' method
+        pdf_content = input_pdf_setup({"read": lambda: raw_pdf_bytes})
 
         with st.spinner("Processing predefined resume and job description..."):
             response_json_str = Automated_Resume_Ranking_System(input_text, pdf_content[0])
